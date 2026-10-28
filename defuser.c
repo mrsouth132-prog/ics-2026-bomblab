@@ -21,58 +21,149 @@ static int write_answer(char *out, size_t cap, const uint32_t *values, size_t co
 
 int solve_phase_1(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_01 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 1;
+    uint32_t low = (uint32_t)challenge;
+    uint32_t high = (uint32_t)(challenge >> 32);
+    uint32_t middle = (uint32_t)(challenge >> 16);
+    uint32_t first = (high + 2u * low) ^ 0x3ebbu;
+    uint32_t second = 4u * low + (middle ^ 0xc25cu);
+    values[0] = 3u * second ^ (first + 0x469au);
     return write_answer(out, cap, values, count);
 }
 
 int solve_phase_2(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_02 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 6;
+    values[0] = 2u * ((uint32_t)(challenge >> 43) & 15u) + 4u;
+    for (unsigned i = 1; i < count; ++i) {
+        uint32_t fragment = (uint32_t)(challenge >> (22u + 3u * (i - 1u))) & 31u;
+        values[i] = 5u * values[i - 1u] + (fragment ^ (i + 1u));
+    }
     return write_answer(out, cap, values, count);
+}
+
+static uint32_t phase3_value(uint32_t selector, uint32_t x) {
+    switch (selector) {
+        case 0: return 3u * x + 0x1b0au;
+        case 1: return 5u * x + 0x2fdu;
+        case 2: return 5u * x + 0x30ad9u;
+        case 3: return (4u * x) ^ 0x2088u;
+        case 4: return (x ^ 0x60bcu) + (x >> 2);
+        case 5: return (4u * x) ^ 0xbfebu;
+        case 6: return 3u * x + 0xa7aau;
+        case 7: return (x ^ 0x8275u) + (x >> 1);
+        default: return 0;
+    }
 }
 
 int solve_phase_3(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_03 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 2;
+    uint32_t x = (uint32_t)(challenge >> 32) ^ (uint32_t)(challenge >> 3);
+    values[0] = (uint32_t)challenge & 7u;
+    values[1] = phase3_value(values[0], x);
     return write_answer(out, cap, values, count);
+}
+
+static uint32_t phase4_walk(uint32_t target, uint32_t low, uint32_t high,
+                            uint32_t salt) {
+    uint32_t middle = low + ((high - low) >> 1);
+    if (target == middle) return (middle + 0xcbu) ^ salt;
+    uint32_t child;
+    uint32_t branch;
+    if (target < middle) {
+        child = phase4_walk(target, low, middle - 1u, salt);
+        branch = 2u;
+    } else {
+        child = phase4_walk(target, middle + 1u, high, salt);
+        branch = 0x19u;
+    }
+    return (3u * child) ^ (middle + salt) ^ branch;
 }
 
 int solve_phase_4(uint64_t challenge, char *out, size_t cap) {
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_04 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 1;
+    uint32_t target = (uint32_t)challenge & 127u;
+    uint32_t salt = (uint32_t)(challenge >> 7) ^ (uint32_t)(challenge >> 32);
+    values[0] = phase4_walk(target, 0, 127u, salt);
     return write_answer(out, cap, values, count);
 }
 
+struct phase5_node {
+    int next;
+    uint32_t tag;
+    uint32_t value;
+};
+
+static const struct phase5_node phase5_nodes[12] = {
+    {9, 1399u, 15708u},
+    {4, 100u, 15737u},
+    {10, 1887u, 17130u},
+    {1, 2689u, 49663u},
+    {6, 2883u, 42131u},
+    {0, 1614u, 14186u},
+    {7, 2352u, 18482u},
+    {5, 611u, 31608u},
+    {2, 874u, 15671u},
+    {-1, 2106u, 64991u},
+    {11, 258u, 47895u},
+    {3, 1122u, 33207u}
+};
+
 int solve_phase_5(uint64_t challenge, char *out, size_t cap) {
+    static const int heads[8] = {8, 2, 10, 11, 3, 1, 4, 6};
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_05 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 2;
+    int node = heads[(uint32_t)challenge & 7u];
+    unsigned visits = 1u + ((uint32_t)(challenge >> 3) & 3u);
+    uint32_t value = (uint32_t)(challenge >> 6) ^ (uint32_t)(challenge >> 32) ^ 0x40b9u;
+    for (unsigned i = 0; i < visits; ++i) {
+        value = (3u * value + phase5_nodes[node].value) ^ phase5_nodes[node].tag;
+        values[1] = phase5_nodes[node].tag;
+        node = phase5_nodes[node].next;
+    }
+    values[0] = value;
     return write_answer(out, cap, values, count);
+}
+
+static uint32_t rotate_right7(uint32_t x) {
+    return (x >> 7) | (x << 25);
+}
+
+static uint32_t phase6_operation(unsigned operation, uint32_t x) {
+    switch (operation) {
+        case 0: return ((x << 3) | (x >> 29)) ^ 0xc2fau;
+        case 1: return rotate_right7(x);
+        case 2: return (x ^ 0x3900u) + 4u * x;
+        case 3: return ((x << 5) + 0x3905u) ^ (5u * x);
+        case 4: return (x + 0x8a65u) ^ (x >> 3);
+        case 5: return (x ^ (x >> 3)) + 0x5a48u;
+        default: return 0;
+    }
 }
 
 int solve_phase_6(uint64_t challenge, char *out, size_t cap) {
+    static const unsigned operations[8] = {5, 2, 1, 0, 2, 4, 3, 3};
     uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 0;
-    (void)challenge;
-    // TODO: 根据 phase_06 的汇编，用 challenge 算出口令中的各个整数，依次存入 values，并把 count 改为整数个数。
+    size_t count = 1;
+    uint32_t x = (uint32_t)(challenge >> 6) ^ (uint32_t)(challenge >> 32);
+    unsigned first = (unsigned)challenge & 7u;
+    unsigned second = (unsigned)(challenge >> 3) & 7u;
+    x = phase6_operation(operations[first], x) ^ 0x6d14u;
+    values[0] = phase6_operation(operations[second], x) + 0x3b26u;
     return write_answer(out, cap, values, count);
 }
 
 int solve_secret(uint64_t challenge, uint64_t context, char *out, size_t cap) {
-    (void)challenge;
-    (void)context;
-    (void)out;
-    (void)cap;
-    // TODO（选做）: 根据 secret_gate、secret_copy 和 secret_phase 的汇编构造完整的第七行，写入 out 后返回 0。
-    // 第七行不一定只有整数，可以直接用 snprintf 写入；还没完成时保持返回 1，测试会显示 not attempted。
-    return 1;
+    uint32_t selector = (uint32_t)context & 3u;
+    uint32_t challenge_fold = (uint32_t)challenge ^ (uint32_t)(challenge >> 32);
+    uint32_t context_fold = (uint32_t)context ^ (uint32_t)(context >> 32);
+    uint32_t second = rotate_right7(challenge_fold ^ context_fold) ^ 0x23a3u;
+    second ^= (selector * 0x5805u) ^ (uint32_t)(context >> 16);
+    uint32_t third = second ^ (context_fold + selector + 0x7ba6u + (challenge_fold >> 7));
+    int size = snprintf(out, cap,
+                        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOPEN%" PRIu32 " %" PRIu32 " %" PRIu32,
+                        selector, second, third);
+    return size < 0 || (size_t)size >= cap;
 }

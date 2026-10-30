@@ -3,12 +3,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#define MAX_FIELDS 8
-
-/*
- * 把 values 中的 count 个整数写成一行“空格分隔的无符号十进制整数”，存入 out。
- * 成功返回 0；count 为 0（还没有实现）、snprintf 出错或结果被截断时返回非零。
- */
 static int write_answer(char *out, size_t cap, const uint32_t *values, size_t count) {
     size_t used = 0;
     for (size_t i = 0; i < count; ++i) {
@@ -20,26 +14,23 @@ static int write_answer(char *out, size_t cap, const uint32_t *values, size_t co
 }
 
 int solve_phase_1(uint64_t challenge, char *out, size_t cap) {
-    uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 1;
     uint32_t low = (uint32_t)challenge;
     uint32_t high = (uint32_t)(challenge >> 32);
     uint32_t middle = (uint32_t)(challenge >> 16);
     uint32_t first = (high + 2u * low) ^ 0x3ebbu;
     uint32_t second = 4u * low + (middle ^ 0xc25cu);
-    values[0] = 3u * second ^ (first + 0x469au);
-    return write_answer(out, cap, values, count);
+    uint32_t answer = (3u * second) ^ (first + 0x469au);
+    return write_answer(out, cap, &answer, 1);
 }
 
 int solve_phase_2(uint64_t challenge, char *out, size_t cap) {
-    uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 6;
+    uint32_t values[6];
     values[0] = 2u * ((uint32_t)(challenge >> 43) & 15u) + 4u;
-    for (unsigned i = 1; i < count; ++i) {
+    for (unsigned i = 1; i < 6; ++i) {
         uint32_t fragment = (uint32_t)(challenge >> (22u + 3u * (i - 1u))) & 31u;
         values[i] = 5u * values[i - 1u] + (fragment ^ (i + 1u));
     }
-    return write_answer(out, cap, values, count);
+    return write_answer(out, cap, values, 6);
 }
 
 static uint32_t phase3_value(uint32_t selector, uint32_t x) {
@@ -57,37 +48,29 @@ static uint32_t phase3_value(uint32_t selector, uint32_t x) {
 }
 
 int solve_phase_3(uint64_t challenge, char *out, size_t cap) {
-    uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 2;
+    uint32_t selector = (uint32_t)challenge & 7u;
     uint32_t x = (uint32_t)(challenge >> 32) ^ (uint32_t)(challenge >> 3);
-    values[0] = (uint32_t)challenge & 7u;
-    values[1] = phase3_value(values[0], x);
-    return write_answer(out, cap, values, count);
+    uint32_t values[2] = {selector, phase3_value(selector, x)};
+    return write_answer(out, cap, values, 2);
 }
 
-static uint32_t phase4_walk(uint32_t target, uint32_t low, uint32_t high,
-                            uint32_t salt) {
+static uint32_t phase4_walk(uint32_t target, uint32_t low, uint32_t high, uint32_t salt) {
     uint32_t middle = low + ((high - low) >> 1);
     if (target == middle) return (middle + 0xcbu) ^ salt;
     uint32_t child;
-    uint32_t branch;
     if (target < middle) {
         child = phase4_walk(target, low, middle - 1u, salt);
-        branch = 2u;
-    } else {
-        child = phase4_walk(target, middle + 1u, high, salt);
-        branch = 0x19u;
+        return (3u * child) ^ (middle + salt) ^ 2u;
     }
-    return (3u * child) ^ (middle + salt) ^ branch;
+    child = phase4_walk(target, middle + 1u, high, salt);
+    return (3u * child) ^ (middle + salt) ^ 0x19u;
 }
 
 int solve_phase_4(uint64_t challenge, char *out, size_t cap) {
-    uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 1;
     uint32_t target = (uint32_t)challenge & 127u;
     uint32_t salt = (uint32_t)(challenge >> 7) ^ (uint32_t)(challenge >> 32);
-    values[0] = phase4_walk(target, 0, 127u, salt);
-    return write_answer(out, cap, values, count);
+    uint32_t answer = phase4_walk(target, 0, 127u, salt);
+    return write_answer(out, cap, &answer, 1);
 }
 
 struct phase5_node {
@@ -113,8 +96,7 @@ static const struct phase5_node phase5_nodes[12] = {
 
 int solve_phase_5(uint64_t challenge, char *out, size_t cap) {
     static const int heads[8] = {8, 2, 10, 11, 3, 1, 4, 6};
-    uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 2;
+    uint32_t values[2];
     int node = heads[(uint32_t)challenge & 7u];
     unsigned visits = 1u + ((uint32_t)(challenge >> 3) & 3u);
     uint32_t value = (uint32_t)(challenge >> 6) ^ (uint32_t)(challenge >> 32) ^ 0x40b9u;
@@ -124,7 +106,7 @@ int solve_phase_5(uint64_t challenge, char *out, size_t cap) {
         node = phase5_nodes[node].next;
     }
     values[0] = value;
-    return write_answer(out, cap, values, count);
+    return write_answer(out, cap, values, 2);
 }
 
 static uint32_t rotate_right7(uint32_t x) {
@@ -145,14 +127,12 @@ static uint32_t phase6_operation(unsigned operation, uint32_t x) {
 
 int solve_phase_6(uint64_t challenge, char *out, size_t cap) {
     static const unsigned operations[8] = {5, 2, 1, 0, 2, 4, 3, 3};
-    uint32_t values[MAX_FIELDS] = {0};
-    size_t count = 1;
     uint32_t x = (uint32_t)(challenge >> 6) ^ (uint32_t)(challenge >> 32);
     unsigned first = (unsigned)challenge & 7u;
     unsigned second = (unsigned)(challenge >> 3) & 7u;
     x = phase6_operation(operations[first], x) ^ 0x6d14u;
-    values[0] = phase6_operation(operations[second], x) + 0x3b26u;
-    return write_answer(out, cap, values, count);
+    x = phase6_operation(operations[second], x) + 0x3b26u;
+    return write_answer(out, cap, &x, 1);
 }
 
 int solve_secret(uint64_t challenge, uint64_t context, char *out, size_t cap) {
